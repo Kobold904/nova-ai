@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
   <title>NOVA</title>
 
   <style>
@@ -57,7 +58,7 @@
       margin-bottom: 16px;
       padding: 13px 16px;
       border-radius: 15px;
-      max-width: 80%;
+      max-width: 85%;
       line-height: 1.5;
       white-space: pre-wrap;
     }
@@ -105,8 +106,9 @@
       cursor: pointer;
     }
 
-    button:active {
-      transform: scale(0.97);
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     @media (max-width: 600px) {
@@ -131,14 +133,13 @@
 
   <header>
     <div class="logo">NOVA</div>
-    <div class="status">LOCAL MODE</div>
+    <div class="status" id="status">LOADING AI...</div>
   </header>
 
   <main id="chat">
 
     <div class="message nova">
-      Hello. I'm NOVA. 👋
-      Give me a thought, a task, or a question to work with.
+      NOVA wird gestartet... 🤖
     </div>
 
   </main>
@@ -148,41 +149,39 @@
     <input
       id="input"
       type="text"
-      placeholder="Message NOVA..."
+      placeholder="Warte auf NOVA..."
       autocomplete="off"
+      disabled
     >
 
-    <button onclick="sendMessage()">Send</button>
+    <button id="sendButton" onclick="sendMessage()" disabled>
+      Send
+    </button>
 
   </div>
 
 </div>
 
-<script>
+<script type="module">
 
-const input = document.getElementById("input");
+import { pipeline } from
+  "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1";
+
+
 const chat = document.getElementById("chat");
+const input = document.getElementById("input");
+const sendButton = document.getElementById("sendButton");
+const status = document.getElementById("status");
+
+
+let generator = null;
+
+let conversation = [];
+
 
 /*
-  NOVA MEMORY
-  Stores the current conversation.
+  Add message to chat
 */
-
-let memory = [];
-
-
-/* ENTER TO SEND */
-
-input.addEventListener("keydown", function(event) {
-
-  if (event.key === "Enter") {
-    sendMessage();
-  }
-
-});
-
-
-/* ADD MESSAGE */
 
 function addMessage(text, type) {
 
@@ -197,352 +196,244 @@ function addMessage(text, type) {
   chat.scrollTop = chat.scrollHeight;
 
   return message;
-
 }
 
 
-/* RANDOM RESPONSE */
+/*
+  Load the actual AI model
+*/
 
-function randomResponse(list) {
-
-  return list[
-    Math.floor(Math.random() * list.length)
-  ];
-
-}
-
-
-/* SIMPLE CALCULATOR */
-
-function calculate(text) {
-
-  let expression = text
-    .replace(/was ist/gi, "")
-    .replace(/berechne/gi, "")
-    .replace(/rechne/gi, "")
-    .replace(/=/g, "")
-    .trim();
-
-  if (!/^[0-9+\-*/().\s]+$/.test(expression)) {
-    return null;
-  }
+async function loadAI() {
 
   try {
 
-    const result = Function(
-      '"use strict"; return (' + expression + ')'
-    )();
+    status.textContent = "LOADING AI...";
 
-    if (Number.isFinite(result)) {
-      return result;
-    }
+    addMessage(
+      "Ich lade gerade mein KI-Modell. Das kann beim ersten Start etwas dauern...",
+      "nova"
+    );
 
-  } catch (error) {}
 
-  return null;
+    /*
+      Qwen2.5 0.5B Instruct
+      4-bit quantized
+    */
+
+    generator = await pipeline(
+      "text-generation",
+      "onnx-community/Qwen2.5-0.5B-Instruct",
+      {
+        device: "webgpu",
+        dtype: "q4"
+      }
+    );
+
+
+    status.textContent = "AI READY";
+
+    input.disabled = false;
+    sendButton.disabled = false;
+
+    input.placeholder = "Message NOVA...";
+
+    addMessage(
+      "Ich bin bereit. 🧠\nDu kannst jetzt mit dem echten lokalen KI-Modell chatten.",
+      "nova"
+    );
+
+  } catch (error) {
+
+    console.error(error);
+
+    status.textContent = "AI ERROR";
+
+    addMessage(
+      "Das KI-Modell konnte auf diesem Gerät nicht gestartet werden.\n\n" +
+      "Möglicherweise unterstützt der Browser WebGPU nicht oder das Modell ist für dieses Gerät zu groß.\n\n" +
+      "Fehler: " + error.message,
+      "nova"
+    );
+
+  }
 
 }
 
 
-/* MEMORY DETECTION */
+/*
+  Generate AI response
+*/
 
-function checkMemory(message) {
+async function generateAIResponse(userText) {
+
+  conversation.push({
+    role: "user",
+    content: userText
+  });
+
 
   /*
-    Check what NOVA remembers.
+    Keep the conversation reasonably small
+    so the iPhone does not have to process
+    an enormous amount of text.
   */
 
-  if (
-    message.includes("was habe ich gesagt") ||
-    message.includes("was weißt du über mich") ||
-    message.includes("erinnerst du dich")
-  ) {
+  const recentConversation =
+    conversation.slice(-8);
 
-    if (memory.length === 0) {
-      return "Noch nicht. Unser Gespräch hat gerade erst begonnen.";
+
+  const messages = [
+
+    {
+      role: "system",
+      content:
+        "You are NOVA, a friendly personal AI assistant. " +
+        "Answer naturally and clearly. " +
+        "The user speaks German, so answer in German unless asked otherwise."
+    },
+
+    ...recentConversation
+
+  ];
+
+
+  /*
+    Convert chat messages into the model's
+    expected prompt format.
+  */
+
+  const prompt =
+    generator.tokenizer.apply_chat_template(
+      messages,
+      {
+        tokenize: false,
+        add_generation_prompt: true
+      }
+    );
+
+
+  const result = await generator(
+    prompt,
+    {
+      max_new_tokens: 180,
+      temperature: 0.7,
+      do_sample: true,
+      return_full_text: false
     }
+  );
 
-    const userMessages = memory
-      .filter(item => item.role === "user")
-      .map(item => item.content);
 
-    if (userMessages.length === 0) {
-      return "Du hast mir bisher noch nichts erzählt.";
-    }
+  let answer = result[0].generated_text;
 
-    return "Ich erinnere mich an unser Gespräch. Deine bisherigen Nachrichten waren unter anderem: " +
-      userMessages.slice(-3).join(" | ");
 
-  }
+  /*
+    Clean up possible special tokens.
+  */
 
-  return null;
+  answer = answer
+    .replace(/<\|im_end\|>/g, "")
+    .replace(/<\|endoftext\|>/g, "")
+    .trim();
+
+
+  conversation.push({
+    role: "assistant",
+    content: answer
+  });
+
+
+  return answer;
 
 }
 
 
-/* MAIN AI LOGIC */
-
-function generateResponse(text) {
-
-  const message = text.toLowerCase().trim();
-
-
-  /* MEMORY */
-
-  const memoryResponse = checkMemory(message);
-
-  if (memoryResponse) {
-    return memoryResponse;
-  }
-
-
-  /* GREETING */
-
-  if (/^(hallo|hi|hey|moin|servus)\b/.test(message)) {
-
-    return randomResponse([
-
-      "Hey! 👋 Was kann ich für dich tun?",
-
-      "Hallo! Ich bin NOVA. Was steht an?",
-
-      "Hey 👋 Schön, dass du da bist."
-
-    ]);
-
-  }
-
-
-  /* IDENTITY */
-
-  if (
-    message.includes("wer bist du") ||
-    message.includes("was bist du")
-  ) {
-
-    return "Ich bin NOVA – deine persönliche lokale KI. 🤖";
-
-  }
-
-
-  /* HOW ARE YOU */
-
-  if (
-    message.includes("wie geht es dir") ||
-    message.includes("wie geht's dir") ||
-    message.includes("wie gehts dir")
-  ) {
-
-    return randomResponse([
-
-      "Mir geht's gut 😄 Was möchtest du machen?",
-
-      "Alles läuft. 🤖 Was steht als Nächstes an?",
-
-      "Bereit und aufmerksam. Was hast du vor?"
-
-    ]);
-
-  }
-
-
-  /* TIME */
-
-  if (
-    message.includes("uhrzeit") ||
-    message.includes("wie spät") ||
-    message.includes("uhr")
-  ) {
-
-    const time = new Date().toLocaleTimeString(
-      "de-DE",
-      {
-        hour: "2-digit",
-        minute: "2-digit"
-      }
-    );
-
-    return "Auf deinem Gerät ist es gerade " + time + " Uhr.";
-
-  }
-
-
-  /* DATE */
-
-  if (
-    message.includes("datum") ||
-    message.includes("welcher tag") ||
-    message.includes("welches datum")
-  ) {
-
-    const date = new Date().toLocaleDateString(
-      "de-DE",
-      {
-        weekday: "long",
-        day: "2-digit",
-        month: "long",
-        year: "numeric"
-      }
-    );
-
-    return "Heute ist " + date + ".";
-
-  }
-
-
-  /* CALCULATOR */
-
-  const result = calculate(message);
-
-  if (result !== null) {
-
-    return "Das Ergebnis ist " + result + ".";
-
-  }
-
-
-  /* WHAT CAN YOU DO */
-
-  if (message.includes("was kannst du")) {
-
-    return `
-Ich kann momentan:
-
-• Fragen erkennen
-• rechnen
-• Datum und Uhrzeit nennen
-• mich an Teile unseres aktuellen Chats erinnern
-• verschiedene Antworten geben
-• einfache Gespräche führen
-
-Ich bin noch eine lokale KI und werde gerade weiterentwickelt. 🧠
-`;
-
-  }
-
-
-  /* HELP */
-
-  if (message.includes("hilfe")) {
-
-    return "Klar! Frag mich einfach etwas oder erzähl mir, was du machen möchtest.";
-
-  }
-
-
-  /* THANK YOU */
-
-  if (
-    message.includes("danke") ||
-    message.includes("dankeschön")
-  ) {
-
-    return randomResponse([
-
-      "Gerne! 😄",
-
-      "Kein Problem!",
-
-      "Immer gerne. 🤖"
-
-    ]);
-
-  }
-
-
-  /* GOODBYE */
-
-  if (
-    message.includes("tschüss") ||
-    message.includes("bye") ||
-    message.includes("bis später")
-  ) {
-
-    return "Bis später! 👋";
-
-  }
-
-
-  /* FALLBACK */
-
-  return randomResponse([
-
-    "Interessant. Erzähl mir mehr darüber.",
-
-    "Ich höre zu. Was genau meinst du?",
-
-    "Das ist interessant. 🤔 Erzähl mir etwas mehr.",
-
-    "Okay. Lass uns darüber sprechen.",
-
-    "Ich bin mir noch nicht ganz sicher, was du meinst. Kannst du es anders formulieren?"
-
-  ]);
-
-}
-
-
-/* SEND MESSAGE */
-
-function sendMessage() {
+/*
+  Send message
+*/
+
+async function sendMessage() {
 
   const text = input.value.trim();
 
-  if (!text) return;
-
-
-  /* SAVE USER MESSAGE */
-
-  memory.push({
-
-    role: "user",
-
-    content: text
-
-  });
+  if (!text || !generator) {
+    return;
+  }
 
 
   addMessage(text, "user");
 
-
   input.value = "";
 
-
-  /* THINKING */
-
-  const thinking = addMessage(
-
-    "NOVA denkt nach...",
-
-    "nova thinking"
-
-  );
+  input.disabled = true;
+  sendButton.disabled = true;
 
 
-  setTimeout(function() {
+  const thinking =
+    addMessage(
+      "NOVA denkt nach...",
+      "nova thinking"
+    );
+
+
+  try {
+
+    const response =
+      await generateAIResponse(text);
+
 
     thinking.remove();
 
+    addMessage(
+      response,
+      "nova"
+    );
 
-    const response = generateResponse(text);
+  } catch (error) {
+
+    thinking.remove();
+
+    addMessage(
+      "Beim Generieren der Antwort ist ein Fehler aufgetreten:\n" +
+      error.message,
+      "nova"
+    );
+
+    console.error(error);
+
+  }
 
 
-    /* SAVE NOVA RESPONSE */
+  input.disabled = false;
+  sendButton.disabled = false;
 
-    memory.push({
-
-      role: "assistant",
-
-      content: response
-
-    });
-
-
-    addMessage(response, "nova");
-
-  }, 500);
+  input.focus();
 
 }
+
+
+/*
+  Enter = send
+*/
+
+input.addEventListener(
+  "keydown",
+  function(event) {
+
+    if (event.key === "Enter") {
+
+      sendMessage();
+
+    }
+
+  }
+);
+
+
+/*
+  Start NOVA
+*/
+
+loadAI();
 
 </script>
 
