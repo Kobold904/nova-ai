@@ -127,240 +127,424 @@
 
 <body>
 
-  <div class="app">
+<div class="app">
 
-    <header>
-      <div class="logo">NOVA</div>
-      <div class="status">LOCAL MODE</div>
-    </header>
+  <header>
+    <div class="logo">NOVA</div>
+    <div class="status">LOCAL MODE</div>
+  </header>
 
-    <main id="chat">
-      <div class="message nova">
-        Hello. I'm NOVA. 👋
-        Give me a thought, a task, or a question to work with.
-      </div>
-    </main>
+  <main id="chat">
 
-    <div class="composer">
-      <input
-        id="input"
-        type="text"
-        placeholder="Message NOVA..."
-        autocomplete="off"
-      >
-
-      <button onclick="sendMessage()">Send</button>
+    <div class="message nova">
+      Hello. I'm NOVA. 👋
+      Give me a thought, a task, or a question to work with.
     </div>
+
+  </main>
+
+  <div class="composer">
+
+    <input
+      id="input"
+      type="text"
+      placeholder="Message NOVA..."
+      autocomplete="off"
+    >
+
+    <button onclick="sendMessage()">Send</button>
 
   </div>
 
-  <script>
-    const input = document.getElementById("input");
-    const chat = document.getElementById("chat");
+</div>
 
-    // Simple memory for the current conversation
-    const conversation = [];
+<script>
 
-    input.addEventListener("keydown", function(event) {
-      if (event.key === "Enter") {
-        sendMessage();
+const input = document.getElementById("input");
+const chat = document.getElementById("chat");
+
+/*
+  NOVA MEMORY
+  Stores the current conversation.
+*/
+
+let memory = [];
+
+
+/* ENTER TO SEND */
+
+input.addEventListener("keydown", function(event) {
+
+  if (event.key === "Enter") {
+    sendMessage();
+  }
+
+});
+
+
+/* ADD MESSAGE */
+
+function addMessage(text, type) {
+
+  const message = document.createElement("div");
+
+  message.className = "message " + type;
+
+  message.textContent = text;
+
+  chat.appendChild(message);
+
+  chat.scrollTop = chat.scrollHeight;
+
+  return message;
+
+}
+
+
+/* RANDOM RESPONSE */
+
+function randomResponse(list) {
+
+  return list[
+    Math.floor(Math.random() * list.length)
+  ];
+
+}
+
+
+/* SIMPLE CALCULATOR */
+
+function calculate(text) {
+
+  let expression = text
+    .replace(/was ist/gi, "")
+    .replace(/berechne/gi, "")
+    .replace(/rechne/gi, "")
+    .replace(/=/g, "")
+    .trim();
+
+  if (!/^[0-9+\-*/().\s]+$/.test(expression)) {
+    return null;
+  }
+
+  try {
+
+    const result = Function(
+      '"use strict"; return (' + expression + ')'
+    )();
+
+    if (Number.isFinite(result)) {
+      return result;
+    }
+
+  } catch (error) {}
+
+  return null;
+
+}
+
+
+/* MEMORY DETECTION */
+
+function checkMemory(message) {
+
+  /*
+    Check what NOVA remembers.
+  */
+
+  if (
+    message.includes("was habe ich gesagt") ||
+    message.includes("was weißt du über mich") ||
+    message.includes("erinnerst du dich")
+  ) {
+
+    if (memory.length === 0) {
+      return "Noch nicht. Unser Gespräch hat gerade erst begonnen.";
+    }
+
+    const userMessages = memory
+      .filter(item => item.role === "user")
+      .map(item => item.content);
+
+    if (userMessages.length === 0) {
+      return "Du hast mir bisher noch nichts erzählt.";
+    }
+
+    return "Ich erinnere mich an unser Gespräch. Deine bisherigen Nachrichten waren unter anderem: " +
+      userMessages.slice(-3).join(" | ");
+
+  }
+
+  return null;
+
+}
+
+
+/* MAIN AI LOGIC */
+
+function generateResponse(text) {
+
+  const message = text.toLowerCase().trim();
+
+
+  /* MEMORY */
+
+  const memoryResponse = checkMemory(message);
+
+  if (memoryResponse) {
+    return memoryResponse;
+  }
+
+
+  /* GREETING */
+
+  if (/^(hallo|hi|hey|moin|servus)\b/.test(message)) {
+
+    return randomResponse([
+
+      "Hey! 👋 Was kann ich für dich tun?",
+
+      "Hallo! Ich bin NOVA. Was steht an?",
+
+      "Hey 👋 Schön, dass du da bist."
+
+    ]);
+
+  }
+
+
+  /* IDENTITY */
+
+  if (
+    message.includes("wer bist du") ||
+    message.includes("was bist du")
+  ) {
+
+    return "Ich bin NOVA – deine persönliche lokale KI. 🤖";
+
+  }
+
+
+  /* HOW ARE YOU */
+
+  if (
+    message.includes("wie geht es dir") ||
+    message.includes("wie geht's dir") ||
+    message.includes("wie gehts dir")
+  ) {
+
+    return randomResponse([
+
+      "Mir geht's gut 😄 Was möchtest du machen?",
+
+      "Alles läuft. 🤖 Was steht als Nächstes an?",
+
+      "Bereit und aufmerksam. Was hast du vor?"
+
+    ]);
+
+  }
+
+
+  /* TIME */
+
+  if (
+    message.includes("uhrzeit") ||
+    message.includes("wie spät") ||
+    message.includes("uhr")
+  ) {
+
+    const time = new Date().toLocaleTimeString(
+      "de-DE",
+      {
+        hour: "2-digit",
+        minute: "2-digit"
       }
+    );
+
+    return "Auf deinem Gerät ist es gerade " + time + " Uhr.";
+
+  }
+
+
+  /* DATE */
+
+  if (
+    message.includes("datum") ||
+    message.includes("welcher tag") ||
+    message.includes("welches datum")
+  ) {
+
+    const date = new Date().toLocaleDateString(
+      "de-DE",
+      {
+        weekday: "long",
+        day: "2-digit",
+        month: "long",
+        year: "numeric"
+      }
+    );
+
+    return "Heute ist " + date + ".";
+
+  }
+
+
+  /* CALCULATOR */
+
+  const result = calculate(message);
+
+  if (result !== null) {
+
+    return "Das Ergebnis ist " + result + ".";
+
+  }
+
+
+  /* WHAT CAN YOU DO */
+
+  if (message.includes("was kannst du")) {
+
+    return `
+Ich kann momentan:
+
+• Fragen erkennen
+• rechnen
+• Datum und Uhrzeit nennen
+• mich an Teile unseres aktuellen Chats erinnern
+• verschiedene Antworten geben
+• einfache Gespräche führen
+
+Ich bin noch eine lokale KI und werde gerade weiterentwickelt. 🧠
+`;
+
+  }
+
+
+  /* HELP */
+
+  if (message.includes("hilfe")) {
+
+    return "Klar! Frag mich einfach etwas oder erzähl mir, was du machen möchtest.";
+
+  }
+
+
+  /* THANK YOU */
+
+  if (
+    message.includes("danke") ||
+    message.includes("dankeschön")
+  ) {
+
+    return randomResponse([
+
+      "Gerne! 😄",
+
+      "Kein Problem!",
+
+      "Immer gerne. 🤖"
+
+    ]);
+
+  }
+
+
+  /* GOODBYE */
+
+  if (
+    message.includes("tschüss") ||
+    message.includes("bye") ||
+    message.includes("bis später")
+  ) {
+
+    return "Bis später! 👋";
+
+  }
+
+
+  /* FALLBACK */
+
+  return randomResponse([
+
+    "Interessant. Erzähl mir mehr darüber.",
+
+    "Ich höre zu. Was genau meinst du?",
+
+    "Das ist interessant. 🤔 Erzähl mir etwas mehr.",
+
+    "Okay. Lass uns darüber sprechen.",
+
+    "Ich bin mir noch nicht ganz sicher, was du meinst. Kannst du es anders formulieren?"
+
+  ]);
+
+}
+
+
+/* SEND MESSAGE */
+
+function sendMessage() {
+
+  const text = input.value.trim();
+
+  if (!text) return;
+
+
+  /* SAVE USER MESSAGE */
+
+  memory.push({
+
+    role: "user",
+
+    content: text
+
+  });
+
+
+  addMessage(text, "user");
+
+
+  input.value = "";
+
+
+  /* THINKING */
+
+  const thinking = addMessage(
+
+    "NOVA denkt nach...",
+
+    "nova thinking"
+
+  );
+
+
+  setTimeout(function() {
+
+    thinking.remove();
+
+
+    const response = generateResponse(text);
+
+
+    /* SAVE NOVA RESPONSE */
+
+    memory.push({
+
+      role: "assistant",
+
+      content: response
+
     });
 
-    function addMessage(text, type) {
-      const message = document.createElement("div");
 
-      message.className = "message " + type;
-      message.textContent = text;
+    addMessage(response, "nova");
 
-      chat.appendChild(message);
-      chat.scrollTop = chat.scrollHeight;
+  }, 500);
 
-      return message;
-    }
+}
 
-    function randomResponse(responses) {
-      return responses[
-        Math.floor(Math.random() * responses.length)
-      ];
-    }
-
-    function calculate(text) {
-      let expression = text
-        .replace(/was ist/gi, "")
-        .replace(/berechne/gi, "")
-        .replace(/rechne/gi, "")
-        .replace(/=/g, "")
-        .trim();
-
-      // Nur einfache mathematische Ausdrücke erlauben
-      if (!/^[0-9+\-*/().\s]+$/.test(expression)) {
-        return null;
-      }
-
-      try {
-        const result = Function(
-          '"use strict"; return (' + expression + ')'
-        )();
-
-        if (Number.isFinite(result)) {
-          return result;
-        }
-      } catch (error) {
-        return null;
-      }
-
-      return null;
-    }
-
-    function generateResponse(text) {
-      const message = text.toLowerCase().trim();
-
-      // Begrüßungen
-      if (/^(hallo|hi|hey|moin|servus)\b/.test(message)) {
-        return randomResponse([
-          "Hey! 👋 Was kann ich für dich tun?",
-          "Hallo! Ich bin NOVA. Was steht an?",
-          "Hey 👋 Schön, dass du da bist."
-        ]);
-      }
-
-      // Name / Identität
-      if (
-        message.includes("wer bist du") ||
-        message.includes("was bist du")
-      ) {
-        return "Ich bin NOVA – deine persönliche lokale KI. 🤖";
-      }
-
-      // Wie geht es dir?
-      if (
-        message.includes("wie geht es dir") ||
-        message.includes("wie geht's dir") ||
-        message.includes("wie gehts dir")
-      ) {
-        return randomResponse([
-          "Mir geht's gut 😄 Was möchtest du machen?",
-          "Alles läuft. 🤖 Was steht als Nächstes an?",
-          "Bereit und aufmerksam. Was hast du vor?"
-        ]);
-      }
-
-      // Uhrzeit
-      if (
-        message.includes("uhrzeit") ||
-        message.includes("wie spät") ||
-        message.includes("uhr")
-      ) {
-        const time = new Date().toLocaleTimeString("de-DE", {
-          hour: "2-digit",
-          minute: "2-digit"
-        });
-
-        return "Auf deinem Gerät ist es gerade " + time + " Uhr.";
-      }
-
-      // Datum
-      if (
-        message.includes("datum") ||
-        message.includes("welcher tag") ||
-        message.includes("welches datum")
-      ) {
-        const date = new Date().toLocaleDateString("de-DE", {
-          weekday: "long",
-          day: "2-digit",
-          month: "long",
-          year: "numeric"
-        });
-
-        return "Heute ist " + date + ".";
-      }
-
-      // Mathematik
-      const result = calculate(message);
-
-      if (result !== null) {
-        return "Das Ergebnis ist " + result + ".";
-      }
-
-      // Hilfe
-      if (message.includes("hilfe")) {
-        return "Klar! Du kannst mich etwas fragen, eine Rechnung eingeben oder einfach mit mir chatten.";
-      }
-
-      // Danke
-      if (
-        message.includes("danke") ||
-        message.includes("dankeschön")
-      ) {
-        return randomResponse([
-          "Gerne! 😄",
-          "Kein Problem!",
-          "Immer gerne. 🤖"
-        ]);
-      }
-
-      // Abschied
-      if (
-        message.includes("tschüss") ||
-        message.includes("bye") ||
-        message.includes("bis später")
-      ) {
-        return "Bis später! 👋";
-      }
-
-      // Einfache Fragen
-      if (message.includes("was kannst du")) {
-        return "Ich kann momentan einfache Fragen beantworten, rechnen, Datum und Uhrzeit erkennen und mich mit dir unterhalten. 🧠";
-      }
-
-      // Fallback
-      return randomResponse([
-        "Interessant. Erzähl mir mehr darüber.",
-        "Ich höre zu. Was genau meinst du?",
-        "Das ist interessant. 🤔 Erzähl mir etwas mehr.",
-        "Okay. Lass uns darüber sprechen.",
-        "Ich bin mir noch nicht ganz sicher, was du meinst. Kannst du es anders formulieren?"
-      ]);
-    }
-
-    function sendMessage() {
-      const text = input.value.trim();
-
-      if (!text) return;
-
-      // User message
-      addMessage(text, "user");
-
-      // Save conversation
-      conversation.push({
-        role: "user",
-        content: text
-      });
-
-      input.value = "";
-
-      // Thinking message
-      const thinking = addMessage(
-        "NOVA denkt nach...",
-        "nova thinking"
-      );
-
-      setTimeout(() => {
-        thinking.remove();
-
-        const response = generateResponse(text);
-
-        addMessage(response, "nova");
-
-        conversation.push({
-          role: "assistant",
-          content: response
-        });
-
-      }, 500);
-    }
-  </script>
+</script>
 
 </body>
 </html>
