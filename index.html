@@ -6,7 +6,9 @@
 <title>NOVA</title>
 
 <style>
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 body {
   margin: 0;
@@ -29,6 +31,7 @@ header {
   border-bottom: 1px solid #202633;
   display: flex;
   justify-content: space-between;
+  align-items: center;
 }
 
 .logo {
@@ -38,8 +41,8 @@ header {
 }
 
 .status {
-  font-size: 12px;
   color: #7dffb2;
+  font-size: 12px;
 }
 
 #chat {
@@ -53,8 +56,8 @@ header {
   margin-bottom: 16px;
   border-radius: 15px;
   max-width: 85%;
-  white-space: pre-wrap;
   line-height: 1.5;
+  white-space: pre-wrap;
 }
 
 .user {
@@ -89,11 +92,6 @@ button {
   padding: 0 18px;
   font-weight: bold;
 }
-
-button:disabled,
-input:disabled {
-  opacity: .5;
-}
 </style>
 </head>
 
@@ -103,232 +101,446 @@ input:disabled {
 
 <header>
   <div class="logo">NOVA</div>
-  <div class="status" id="status">STARTING...</div>
+  <div class="status">FREE MODE</div>
 </header>
 
 <main id="chat">
+
   <div class="message nova">
-    NOVA wird gestartet... 🤖
+    Hallo! Ich bin NOVA. 👋
+
+    Ich funktioniere ohne API-Key,
+    ohne Abo und ohne kostenpflichtigen KI-Dienst.
+
+    Was möchtest du machen?
   </div>
+
 </main>
 
 <div class="composer">
-  <input id="input" placeholder="Message NOVA..." disabled>
-  <button id="send" disabled>Send</button>
-</div>
+
+  <input
+    id="input"
+    type="text"
+    placeholder="Nachricht an NOVA..."
+    autocomplete="off"
+  >
+
+  <button id="send">Senden</button>
 
 </div>
 
-<script type="module">
+</div>
 
-import { pipeline } from
-"https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/+esm";
+<script>
 
 const chat = document.getElementById("chat");
 const input = document.getElementById("input");
 const send = document.getElementById("send");
-const status = document.getElementById("status");
 
-let ai = null;
-let messages = [];
+/*
+  NOVA MEMORY
+  ----------------
+  Die letzten Nachrichten werden
+  auf dem Gerät gespeichert.
+*/
+
+let memory = JSON.parse(
+  localStorage.getItem("nova_memory") || "[]"
+);
+
+
+/*
+  Nachricht anzeigen
+*/
 
 function addMessage(text, type) {
-  const el = document.createElement("div");
-  el.className = "message " + type;
-  el.textContent = text;
-  chat.appendChild(el);
+
+  const message = document.createElement("div");
+
+  message.className = "message " + type;
+
+  message.textContent = text;
+
+  chat.appendChild(message);
+
   chat.scrollTop = chat.scrollHeight;
-  return el;
 }
 
-async function loadModel() {
 
-  addMessage(
-    "Ich lade ein kleines lokales KI-Modell. Beim ersten Start kann der Download einige Zeit dauern.",
-    "nova"
-  );
+/*
+  Zufällige Antwort
+*/
+
+function random(list) {
+
+  return list[
+    Math.floor(Math.random() * list.length)
+  ];
+
+}
+
+
+/*
+  Rechner
+*/
+
+function calculate(text) {
+
+  let expression = text
+    .replace(/was ist/gi, "")
+    .replace(/berechne/gi, "")
+    .replace(/rechne/gi, "")
+    .replace(/=/g, "")
+    .trim();
+
+  if (!/^[0-9+\-*/().\s]+$/.test(expression)) {
+    return null;
+  }
 
   try {
 
-    status.textContent = "GPU TEST...";
+    const result =
+      Function(
+        '"use strict"; return (' +
+        expression +
+        ')'
+      )();
 
-    /*
-      Zuerst versuchen wir WebGPU.
-    */
+    if (Number.isFinite(result)) {
+      return result;
+    }
 
-    if ("gpu" in navigator) {
+  } catch {}
 
-      try {
+  return null;
+}
 
-        ai = await pipeline(
-          "text-generation",
-          "onnx-community/Qwen2.5-0.5B-Instruct",
-          {
-            device: "webgpu",
-            dtype: "q4f16"
-          }
-        );
 
-        status.textContent = "LOCAL GPU AI";
+/*
+  Gedächtnis
+*/
 
-        addMessage(
-          "KI bereit. 🧠⚡",
-          "nova"
-        );
+function memoryAnswer(message) {
 
-        enableChat();
-        return;
+  if (
+    message.includes("was habe ich gesagt") ||
+    message.includes("erinnerst du dich") ||
+    message.includes("was weißt du")
+  ) {
 
-      } catch (gpuError) {
+    const userMessages =
+      memory
+        .filter(x => x.role === "user")
+        .slice(-5);
 
-        console.log("WebGPU failed:", gpuError);
+    if (!userMessages.length) {
 
-      }
+      return "Ich habe noch keine früheren Nachrichten gespeichert.";
 
     }
 
-    /*
-      Wenn WebGPU nicht funktioniert,
-      versuchen wir CPU/WASM.
-    */
-
-    status.textContent = "CPU MODE...";
-
-    ai = await pipeline(
-      "text-generation",
-      "onnx-community/Qwen2.5-0.5B-Instruct",
-      {
-        device: "wasm",
-        dtype: "q4f16"
-      }
-    );
-
-    status.textContent = "LOCAL CPU AI";
-
-    addMessage(
-      "KI bereit. 🧠\nCPU-Modus ist aktiv und kann langsamer sein.",
-      "nova"
-    );
-
-    enableChat();
-
-  } catch (error) {
-
-    console.error(error);
-
-    status.textContent = "AI ERROR";
-
-    addMessage(
-      "Das Modell konnte nicht geladen werden.\n\n" +
-      "Fehler: " + error.message,
-      "nova"
+    return (
+      "Ich erinnere mich an diese Nachrichten:\n\n" +
+      userMessages
+        .map(x => "• " + x.content)
+        .join("\n")
     );
   }
+
+  return null;
 }
 
-function enableChat() {
-  input.disabled = false;
-  send.disabled = false;
-  input.focus();
+
+/*
+  NOVA ENGINE
+*/
+
+function nova(text) {
+
+  const message =
+    text.toLowerCase().trim();
+
+
+  /*
+    MEMORY
+  */
+
+  const remembered =
+    memoryAnswer(message);
+
+  if (remembered) {
+    return remembered;
+  }
+
+
+  /*
+    BEGRÜSSUNG
+  */
+
+  if (
+    /^(hallo|hi|hey|moin|servus)\b/.test(message)
+  ) {
+
+    return random([
+      "Hey! 👋 Was machen wir?",
+      "Hallo! Schön dich zu sehen.",
+      "Hey! NOVA ist bereit. 🤖"
+    ]);
+
+  }
+
+
+  /*
+    IDENTITÄT
+  */
+
+  if (
+    message.includes("wer bist du") ||
+    message.includes("was bist du")
+  ) {
+
+    return (
+      "Ich bin NOVA – deine persönliche " +
+      "kostenfreie KI-Assistentin. 🤖"
+    );
+
+  }
+
+
+  /*
+    WAS KANNST DU?
+  */
+
+  if (message.includes("was kannst du")) {
+
+    return `
+Ich kann momentan:
+
+• mit dir chatten
+• mich an Nachrichten erinnern
+• rechnen
+• Datum und Uhrzeit nennen
+• einfache Aufgaben erkennen
+• Informationen aus unserem Gespräch verwenden
+
+Und das ohne API-Key und ohne Abo. 🔒
+`;
+
+  }
+
+
+  /*
+    ZEIT
+  */
+
+  if (
+    message.includes("uhrzeit") ||
+    message.includes("wie spät")
+  ) {
+
+    const time =
+      new Date().toLocaleTimeString(
+        "de-DE",
+        {
+          hour: "2-digit",
+          minute: "2-digit"
+        }
+      );
+
+    return "Es ist gerade " + time + " Uhr.";
+
+  }
+
+
+  /*
+    DATUM
+  */
+
+  if (
+    message.includes("datum") ||
+    message.includes("welcher tag")
+  ) {
+
+    const date =
+      new Date().toLocaleDateString(
+        "de-DE",
+        {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          year: "numeric"
+        }
+      );
+
+    return "Heute ist " + date + ".";
+
+  }
+
+
+  /*
+    RECHNEN
+  */
+
+  const result =
+    calculate(message);
+
+  if (result !== null) {
+
+    return "Das Ergebnis ist " + result + ".";
+
+  }
+
+
+  /*
+    DANKESCHÖN
+  */
+
+  if (
+    message.includes("danke") ||
+    message.includes("dankeschön")
+  ) {
+
+    return random([
+      "Gerne! 😄",
+      "Kein Problem!",
+      "Immer gerne. 🤖"
+    ]);
+
+  }
+
+
+  /*
+    ABSCHIED
+  */
+
+  if (
+    message.includes("tschüss") ||
+    message.includes("bye")
+  ) {
+
+    return "Bis später! 👋";
+
+  }
+
+
+  /*
+    ALLGEMEINE ANTWORT
+  */
+
+  return random([
+    "Interessant. Erzähl mir mehr.",
+    "Ich höre zu. Was genau meinst du?",
+    "Okay. Lass uns darüber sprechen.",
+    "Das klingt interessant. 🤔",
+    "Erzähl mir etwas mehr darüber."
+  ]);
+
 }
 
-async function generate(text) {
 
-  messages.push({
+/*
+  NACHRICHT SENDEN
+*/
+
+function sendMessage() {
+
+  const text =
+    input.value.trim();
+
+  if (!text) return;
+
+
+  /*
+    Nachricht speichern
+  */
+
+  memory.push({
     role: "user",
     content: text
   });
 
-  const recent = messages.slice(-6);
 
-  const prompt = [
-    {
-      role: "system",
-      content:
-        "Du bist NOVA, eine freundliche persönliche KI. " +
-        "Antworte auf Deutsch, außer der Benutzer bittet um eine andere Sprache. " +
-        "Sei hilfreich und verständlich."
-    },
-    ...recent
-  ];
+  /*
+    Speicher begrenzen
+  */
 
-  const result = await ai(
-    prompt,
-    {
-      max_new_tokens: 120,
-      temperature: 0.7,
-      do_sample: true
-    }
-  );
+  if (memory.length > 50) {
 
-  let answer = result[0].generated_text;
+    memory =
+      memory.slice(-50);
 
-  if (Array.isArray(answer)) {
-    answer = answer[answer.length - 1].content;
   }
 
-  answer = String(answer)
-    .replace(/<\|im_end\|>/g, "")
-    .trim();
 
-  messages.push({
-    role: "assistant",
-    content: answer
-  });
+  localStorage.setItem(
+    "nova_memory",
+    JSON.stringify(memory)
+  );
 
-  return answer;
-}
-
-async function sendMessage() {
-
-  const text = input.value.trim();
-
-  if (!text || !ai) return;
 
   addMessage(text, "user");
 
   input.value = "";
-  input.disabled = true;
-  send.disabled = true;
 
-  const thinking = addMessage(
-    "NOVA denkt nach...",
-    "nova"
-  );
 
-  try {
+  /*
+    Denken
+  */
 
-    const answer = await generate(text);
+  const thinking =
+    document.createElement("div");
+
+  thinking.className =
+    "message nova";
+
+  thinking.textContent =
+    "NOVA denkt nach...";
+
+  chat.appendChild(thinking);
+
+
+  setTimeout(() => {
 
     thinking.remove();
 
-    addMessage(answer, "nova");
-
-  } catch (error) {
-
-    thinking.remove();
+    const response =
+      nova(text);
 
     addMessage(
-      "Fehler beim Antworten: " + error.message,
+      response,
       "nova"
     );
 
-  }
+  }, 400);
 
-  input.disabled = false;
-  send.disabled = false;
-  input.focus();
 }
 
-send.addEventListener("click", sendMessage);
 
-input.addEventListener("keydown", event => {
-  if (event.key === "Enter") {
-    sendMessage();
+/*
+  Button
+*/
+
+send.addEventListener(
+  "click",
+  sendMessage
+);
+
+
+/*
+  Enter
+*/
+
+input.addEventListener(
+  "keydown",
+  event => {
+
+    if (event.key === "Enter") {
+      sendMessage();
+    }
+
   }
-});
-
-loadModel();
+);
 
 </script>
 
