@@ -59,6 +59,7 @@
       border-radius: 15px;
       max-width: 80%;
       line-height: 1.5;
+      white-space: pre-wrap;
     }
 
     .user {
@@ -69,6 +70,11 @@
     .nova {
       margin-right: auto;
       background: #151b26;
+    }
+
+    .thinking {
+      opacity: 0.6;
+      font-style: italic;
     }
 
     .composer {
@@ -86,6 +92,7 @@
       background: #111722;
       color: white;
       outline: none;
+      font-size: 16px;
     }
 
     button {
@@ -101,6 +108,20 @@
     button:active {
       transform: scale(0.97);
     }
+
+    @media (max-width: 600px) {
+      .logo {
+        font-size: 21px;
+      }
+
+      .message {
+        max-width: 90%;
+      }
+
+      button {
+        padding: 0 16px;
+      }
+    }
   </style>
 </head>
 
@@ -115,7 +136,7 @@
 
     <main id="chat">
       <div class="message nova">
-        Hello. I'm NOVA. 👋<br>
+        Hello. I'm NOVA. 👋
         Give me a thought, a task, or a question to work with.
       </div>
     </main>
@@ -127,6 +148,7 @@
         placeholder="Message NOVA..."
         autocomplete="off"
       >
+
       <button onclick="sendMessage()">Send</button>
     </div>
 
@@ -135,6 +157,9 @@
   <script>
     const input = document.getElementById("input");
     const chat = document.getElementById("chat");
+
+    // Simple memory for the current conversation
+    const conversation = [];
 
     input.addEventListener("keydown", function(event) {
       if (event.key === "Enter") {
@@ -150,34 +175,153 @@
 
       chat.appendChild(message);
       chat.scrollTop = chat.scrollHeight;
+
+      return message;
+    }
+
+    function randomResponse(responses) {
+      return responses[
+        Math.floor(Math.random() * responses.length)
+      ];
+    }
+
+    function calculate(text) {
+      let expression = text
+        .replace(/was ist/gi, "")
+        .replace(/berechne/gi, "")
+        .replace(/rechne/gi, "")
+        .replace(/=/g, "")
+        .trim();
+
+      // Nur einfache mathematische Ausdrücke erlauben
+      if (!/^[0-9+\-*/().\s]+$/.test(expression)) {
+        return null;
+      }
+
+      try {
+        const result = Function(
+          '"use strict"; return (' + expression + ')'
+        )();
+
+        if (Number.isFinite(result)) {
+          return result;
+        }
+      } catch (error) {
+        return null;
+      }
+
+      return null;
     }
 
     function generateResponse(text) {
-      const message = text.toLowerCase();
+      const message = text.toLowerCase().trim();
 
-      if (message.includes("hallo") ||
-          message.includes("hi") ||
-          message.includes("hey")) {
-        return "Hey! 👋 Ich bin NOVA. Was möchtest du machen?";
+      // Begrüßungen
+      if (/^(hallo|hi|hey|moin|servus)\b/.test(message)) {
+        return randomResponse([
+          "Hey! 👋 Was kann ich für dich tun?",
+          "Hallo! Ich bin NOVA. Was steht an?",
+          "Hey 👋 Schön, dass du da bist."
+        ]);
       }
 
-      if (message.includes("wer bist du")) {
-        return "Ich bin NOVA – deine persönliche KI.";
+      // Name / Identität
+      if (
+        message.includes("wer bist du") ||
+        message.includes("was bist du")
+      ) {
+        return "Ich bin NOVA – deine persönliche lokale KI. 🤖";
       }
 
-      if (message.includes("wie geht")) {
-        return "Mir geht's gut. Danke 😄 Was steht bei dir an?";
+      // Wie geht es dir?
+      if (
+        message.includes("wie geht es dir") ||
+        message.includes("wie geht's dir") ||
+        message.includes("wie gehts dir")
+      ) {
+        return randomResponse([
+          "Mir geht's gut 😄 Was möchtest du machen?",
+          "Alles läuft. 🤖 Was steht als Nächstes an?",
+          "Bereit und aufmerksam. Was hast du vor?"
+        ]);
       }
 
+      // Uhrzeit
+      if (
+        message.includes("uhrzeit") ||
+        message.includes("wie spät") ||
+        message.includes("uhr")
+      ) {
+        const time = new Date().toLocaleTimeString("de-DE", {
+          hour: "2-digit",
+          minute: "2-digit"
+        });
+
+        return "Auf deinem Gerät ist es gerade " + time + " Uhr.";
+      }
+
+      // Datum
+      if (
+        message.includes("datum") ||
+        message.includes("welcher tag") ||
+        message.includes("welches datum")
+      ) {
+        const date = new Date().toLocaleDateString("de-DE", {
+          weekday: "long",
+          day: "2-digit",
+          month: "long",
+          year: "numeric"
+        });
+
+        return "Heute ist " + date + ".";
+      }
+
+      // Mathematik
+      const result = calculate(message);
+
+      if (result !== null) {
+        return "Das Ergebnis ist " + result + ".";
+      }
+
+      // Hilfe
       if (message.includes("hilfe")) {
-        return "Klar. Sag mir einfach, wobei du Hilfe brauchst.";
+        return "Klar! Du kannst mich etwas fragen, eine Rechnung eingeben oder einfach mit mir chatten.";
       }
 
-      if (message.includes("zeit")) {
-        return "Die aktuelle Zeit kann ich in dieser lokalen Version noch nicht zuverlässig abrufen.";
+      // Danke
+      if (
+        message.includes("danke") ||
+        message.includes("dankeschön")
+      ) {
+        return randomResponse([
+          "Gerne! 😄",
+          "Kein Problem!",
+          "Immer gerne. 🤖"
+        ]);
       }
 
-      return "Interessant. Erzähl mir mehr darüber.";
+      // Abschied
+      if (
+        message.includes("tschüss") ||
+        message.includes("bye") ||
+        message.includes("bis später")
+      ) {
+        return "Bis später! 👋";
+      }
+
+      // Einfache Fragen
+      if (message.includes("was kannst du")) {
+        return "Ich kann momentan einfache Fragen beantworten, rechnen, Datum und Uhrzeit erkennen und mich mit dir unterhalten. 🧠";
+      }
+
+      // Fallback
+      return randomResponse([
+        "Interessant. Erzähl mir mehr darüber.",
+        "Ich höre zu. Was genau meinst du?",
+        "Das ist interessant. 🤔 Erzähl mir etwas mehr.",
+        "Okay. Lass uns darüber sprechen.",
+        "Ich bin mir noch nicht ganz sicher, was du meinst. Kannst du es anders formulieren?"
+      ]);
     }
 
     function sendMessage() {
@@ -185,13 +329,35 @@
 
       if (!text) return;
 
+      // User message
       addMessage(text, "user");
+
+      // Save conversation
+      conversation.push({
+        role: "user",
+        content: text
+      });
 
       input.value = "";
 
+      // Thinking message
+      const thinking = addMessage(
+        "NOVA denkt nach...",
+        "nova thinking"
+      );
+
       setTimeout(() => {
+        thinking.remove();
+
         const response = generateResponse(text);
+
         addMessage(response, "nova");
+
+        conversation.push({
+          role: "assistant",
+          content: response
+        });
+
       }, 500);
     }
   </script>
