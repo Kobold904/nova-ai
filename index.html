@@ -114,16 +114,6 @@ button {
 button:active {
   transform: scale(.96);
 }
-
-@media (max-width: 600px) {
-  .logo {
-    font-size: 21px;
-  }
-
-  .message {
-    max-width: 90%;
-  }
-}
 </style>
 </head>
 
@@ -133,7 +123,7 @@ button:active {
 
 <header>
   <div class="logo">NOVA</div>
-  <div class="status" id="status">VOICE READY</div>
+  <div class="status" id="status">ONLINE</div>
 </header>
 
 <main id="chat">
@@ -141,7 +131,7 @@ button:active {
   <div class="message nova">
     Hallo. Ich bin NOVA. 👋
 
-    Du kannst mir schreiben oder auf 🎙️ tippen und mit mir sprechen.
+    Was möchtest du wissen?
   </div>
 
 </main>
@@ -165,6 +155,9 @@ button:active {
 
 <script>
 
+const WORKER_URL =
+  "https://weathered-term-6500.nie-butan-9x.workers.dev/";
+
 const chat = document.getElementById("chat");
 const input = document.getElementById("input");
 const send = document.getElementById("send");
@@ -173,305 +166,64 @@ const status = document.getElementById("status");
 
 
 /* =========================
-   GEDÄCHTNIS
-========================= */
-
-let memory = JSON.parse(
-  localStorage.getItem("nova_memory") || "[]"
-);
-
-
-/* =========================
-   NACHRICHT ANZEIGEN
+   CHAT
 ========================= */
 
 function addMessage(text, type) {
 
   const message = document.createElement("div");
 
-  message.className = "message " + type;
+  message.className =
+    "message " + type;
 
   message.textContent = text;
 
   chat.appendChild(message);
 
-  chat.scrollTop = chat.scrollHeight;
-
+  chat.scrollTop =
+    chat.scrollHeight;
 }
 
 
 /* =========================
-   ZUFÄLLIGE ANTWORT
+   NOVA FRAGEN
 ========================= */
 
-function random(list) {
+async function askNova(text) {
 
-  return list[
-    Math.floor(Math.random() * list.length)
-  ];
+  const response =
+    await fetch(WORKER_URL, {
 
-}
+      method: "POST",
 
+      headers: {
+        "Content-Type": "application/json"
+      },
 
-/* =========================
-   RECHNER
-========================= */
+      body: JSON.stringify({
+        message: text
+      })
 
-function calculate(text) {
-
-  let expression = text
-    .replace(/was ist/gi, "")
-    .replace(/berechne/gi, "")
-    .replace(/rechne/gi, "")
-    .replace(/=/g, "")
-    .trim();
-
-  if (!/^[0-9+\-*/().\s]+$/.test(expression)) {
-    return null;
-  }
-
-  try {
-
-    const result =
-      Function(
-        '"use strict"; return (' +
-        expression +
-        ')'
-      )();
-
-    if (Number.isFinite(result)) {
-      return result;
-    }
-
-  } catch {}
-
-  return null;
-}
+    });
 
 
-/* =========================
-   GEDÄCHTNIS
-========================= */
-
-function memoryAnswer(message) {
-
-  if (
-    message.includes("was habe ich gesagt") ||
-    message.includes("erinnerst du dich") ||
-    message.includes("was weißt du über mich")
-  ) {
-
-    const previous =
-      memory
-        .filter(x => x.role === "user")
-        .slice(-5);
-
-    if (!previous.length) {
-      return "Ich habe noch keine Nachrichten von dir gespeichert.";
-    }
-
-    return (
-      "Ich erinnere mich an:\n\n" +
-      previous
-        .map(x => "• " + x.content)
-        .join("\n")
+  if (!response.ok) {
+    throw new Error(
+      "Worker antwortet nicht."
     );
   }
 
-  return null;
-}
+
+  const data =
+    await response.json();
 
 
-/* =========================
-   NOVA
-========================= */
-
-function nova(text) {
-
-  const message =
-    text.toLowerCase().trim();
-
-
-  const remembered =
-    memoryAnswer(message);
-
-  if (remembered) {
-    return remembered;
+  if (data.error) {
+    throw new Error(data.error);
   }
 
 
-  /* Begrüßung */
-
-  if (
-    /^(hallo|hi|hey|moin|servus)\b/.test(message)
-  ) {
-
-    return random([
-      "Hey! 👋 Was machen wir?",
-      "Hallo! Schön dich zu sehen.",
-      "Hey! NOVA ist bereit. 🤖"
-    ]);
-
-  }
-
-
-  /* Identität */
-
-  if (
-    message.includes("wer bist du") ||
-    message.includes("was bist du")
-  ) {
-
-    return "Ich bin NOVA – deine persönliche KI-Assistentin. 🤖";
-
-  }
-
-
-  /* Fähigkeiten */
-
-  if (message.includes("was kannst du")) {
-
-    return `
-Ich kann momentan:
-
-• mit dir chatten
-• mich an dein Gespräch erinnern
-• rechnen
-• Datum und Uhrzeit nennen
-• mit deiner Stimme arbeiten
-• meine Antworten vorlesen
-
-Und das ohne API-Key und ohne Abo.
-`;
-
-  }
-
-
-  /* Uhrzeit */
-
-  if (
-    message.includes("uhrzeit") ||
-    message.includes("wie spät")
-  ) {
-
-    const time =
-      new Date().toLocaleTimeString(
-        "de-DE",
-        {
-          hour: "2-digit",
-          minute: "2-digit"
-        }
-      );
-
-    return "Es ist gerade " + time + " Uhr.";
-
-  }
-
-
-  /* Datum */
-
-  if (
-    message.includes("datum") ||
-    message.includes("welcher tag")
-  ) {
-
-    const date =
-      new Date().toLocaleDateString(
-        "de-DE",
-        {
-          weekday: "long",
-          day: "numeric",
-          month: "long",
-          year: "numeric"
-        }
-      );
-
-    return "Heute ist " + date + ".";
-
-  }
-
-
-  /* Rechner */
-
-  const result =
-    calculate(message);
-
-  if (result !== null) {
-
-    return "Das Ergebnis ist " + result + ".";
-
-  }
-
-
-  /* Danke */
-
-  if (
-    message.includes("danke") ||
-    message.includes("dankeschön")
-  ) {
-
-    return random([
-      "Gerne! 😄",
-      "Kein Problem.",
-      "Immer gerne."
-    ]);
-
-  }
-
-
-  /* Abschied */
-
-  if (
-    message.includes("tschüss") ||
-    message.includes("bye")
-  ) {
-
-    return "Bis später! 👋";
-
-  }
-
-
-  return random([
-    "Interessant. Erzähl mir mehr.",
-    "Ich höre zu. Was genau meinst du?",
-    "Okay. Lass uns darüber sprechen.",
-    "Das klingt interessant. 🤔",
-    "Erzähl mir etwas mehr darüber."
-  ]);
-
-}
-
-
-/* =========================
-   ANTWORT VORLESEN
-========================= */
-
-function speak(text) {
-
-  if (!("speechSynthesis" in window)) {
-    return;
-  }
-
-  speechSynthesis.cancel();
-
-  const cleanText =
-    text
-      .replace(/[•🧠🤖👋😄⚡🎙️]/g, "")
-      .trim();
-
-  const utterance =
-    new SpeechSynthesisUtterance(cleanText);
-
-  utterance.lang = "de-DE";
-
-  utterance.rate = 0.95;
-
-  utterance.pitch = 0.9;
-
-  utterance.volume = 1;
-
-  speechSynthesis.speak(utterance);
-
+  return data.reply;
 }
 
 
@@ -479,7 +231,7 @@ function speak(text) {
    NACHRICHT SENDEN
 ========================= */
 
-function sendMessage() {
+async function sendMessage() {
 
   const text =
     input.value.trim();
@@ -489,27 +241,17 @@ function sendMessage() {
   }
 
 
-  addMessage(text, "user");
-
-
-  memory.push({
-    role: "user",
-    content: text
-  });
-
-
-  if (memory.length > 50) {
-    memory = memory.slice(-50);
-  }
-
-
-  localStorage.setItem(
-    "nova_memory",
-    JSON.stringify(memory)
+  addMessage(
+    text,
+    "user"
   );
 
 
   input.value = "";
+
+
+  status.textContent =
+    "THINKING...";
 
 
   const thinking =
@@ -521,15 +263,19 @@ function sendMessage() {
   thinking.textContent =
     "NOVA denkt nach...";
 
-  chat.appendChild(thinking);
+  chat.appendChild(
+    thinking
+  );
 
 
-  setTimeout(() => {
+  try {
+
+    const response =
+      await askNova(text);
+
 
     thinking.remove();
 
-    const response =
-      nova(text);
 
     addMessage(
       response,
@@ -537,24 +283,64 @@ function sendMessage() {
     );
 
 
-    memory.push({
-      role: "assistant",
-      content: response
-    });
+    speak(response);
 
 
-    localStorage.setItem(
-      "nova_memory",
-      JSON.stringify(memory)
+  } catch (error) {
+
+    thinking.remove();
+
+
+    addMessage(
+      "Verbindung zu NOVA konnte nicht hergestellt werden.",
+      "nova"
+    );
+
+    console.error(error);
+
+  }
+
+
+  status.textContent =
+    "ONLINE";
+}
+
+
+/* =========================
+   VORLESEN
+========================= */
+
+function speak(text) {
+
+  if (
+    !("speechSynthesis" in window)
+  ) {
+    return;
+  }
+
+
+  speechSynthesis.cancel();
+
+
+  const utterance =
+    new SpeechSynthesisUtterance(
+      text
     );
 
 
-    /* NOVA spricht */
+  utterance.lang =
+    "de-DE";
 
-    speak(response);
+  utterance.rate =
+    0.95;
 
-  }, 500);
+  utterance.pitch =
+    0.9;
 
+
+  speechSynthesis.speak(
+    utterance
+  );
 }
 
 
@@ -576,8 +362,12 @@ input.addEventListener(
   "keydown",
   event => {
 
-    if (event.key === "Enter") {
+    if (
+      event.key === "Enter"
+    ) {
+
       sendMessage();
+
     }
 
   }
@@ -585,7 +375,7 @@ input.addEventListener(
 
 
 /* =========================
-   SPRACHERKENNUNG
+   SPRACHEINGABE
 ========================= */
 
 const SpeechRecognition =
@@ -598,13 +388,15 @@ if (SpeechRecognition) {
   const recognition =
     new SpeechRecognition();
 
-  recognition.lang = "de-DE";
 
-  recognition.continuous = false;
+  recognition.lang =
+    "de-DE";
 
-  recognition.interimResults = false;
+  recognition.continuous =
+    false;
 
-  recognition.maxAlternatives = 1;
+  recognition.interimResults =
+    false;
 
 
   mic.addEventListener(
@@ -621,72 +413,61 @@ if (SpeechRecognition) {
   );
 
 
-  recognition.onstart = () => {
+  recognition.onstart =
+    () => {
 
-    mic.classList.add("listening");
+      mic.classList.add(
+        "listening"
+      );
 
-    status.textContent =
-      "LISTENING...";
+      status.textContent =
+        "LISTENING...";
 
-  };
-
-
-  recognition.onresult = event => {
-
-    const text =
-      event.results[0][0].transcript;
-
-    input.value = text;
-
-    sendMessage();
-
-  };
+    };
 
 
-  recognition.onerror = event => {
+  recognition.onresult =
+    event => {
 
-    console.log(
-      "Speech error:",
-      event.error
-    );
+      const text =
+        event.results[0][0]
+          .transcript;
 
-    status.textContent =
-      "VOICE READY";
+      input.value =
+        text;
 
-    mic.classList.remove(
-      "listening"
-    );
+      sendMessage();
 
-  };
+    };
 
 
-  recognition.onend = () => {
+  recognition.onerror =
+    () => {
 
-    mic.classList.remove(
-      "listening"
-    );
+      mic.classList.remove(
+        "listening"
+      );
 
-    status.textContent =
-      "VOICE READY";
+      status.textContent =
+        "ONLINE";
 
-  };
+    };
 
-} else {
 
-  mic.disabled = true;
+  recognition.onend =
+    () => {
 
-  mic.title =
-    "Spracherkennung wird von diesem Browser nicht unterstützt";
+      mic.classList.remove(
+        "listening"
+      );
 
-  status.textContent =
-    "VOICE OUTPUT READY";
+      status.textContent =
+        "ONLINE";
+
+    };
 
 }
 
-
-/* =========================
-   START
-========================= */
 
 input.focus();
 
