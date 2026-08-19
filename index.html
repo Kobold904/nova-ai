@@ -6,9 +6,7 @@
   <title>NOVA</title>
 
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -40,7 +38,7 @@
       letter-spacing: 4px;
     }
 
-    .online {
+    .status {
       color: #7dffb2;
       font-size: 12px;
     }
@@ -113,21 +111,24 @@
 
   <header>
     <div class="logo">NOVA</div>
-    <div class="online" id="status">ONLINE</div>
+    <div class="status" id="status">ONLINE</div>
   </header>
 
   <main id="chat">
+
     <div class="message nova">
       Hallo 👋
-      
-      Ich bin NOVA. Schreib mir etwas.
+
+      Ich bin NOVA. Was möchtest du wissen?
     </div>
+
   </main>
 
   <div class="composer">
 
     <input
       id="input"
+      type="text"
       placeholder="Nachricht an NOVA..."
       autocomplete="off"
     >
@@ -141,7 +142,8 @@
 <script>
 
 const WORKER_URL =
-  "https://weathered-term-6500.nie-butan-9x.workers.dev/";
+  "https://nova-api.nie-butan-9x.workers.dev/";
+
 
 const chat =
   document.getElementById("chat");
@@ -194,7 +196,7 @@ async function askNova(text) {
 
   if (!response.ok) {
     throw new Error(
-      "HTTP " + response.status
+      "Serverfehler: " + response.status
     );
   }
 
@@ -203,10 +205,8 @@ async function askNova(text) {
     await response.json();
 
 
-  if (!data.reply) {
-    throw new Error(
-      "Keine Antwort vom Worker"
-    );
+  if (data.error) {
+    throw new Error(data.error);
   }
 
 
@@ -251,7 +251,7 @@ async function sendMessage() {
     console.error(error);
 
     addMessage(
-      "Fehler: Verbindung zum NOVA-Server fehlgeschlagen.",
+      "Fehler: " + error.message,
       "nova"
     );
 
@@ -275,7 +275,7 @@ send.addEventListener(
 
 input.addEventListener(
   "keydown",
-  event => {
+  function(event) {
 
     if (event.key === "Enter") {
       sendMessage();
